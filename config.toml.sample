@@ -1,0 +1,11 @@
+# YouTube Live TTS Bot Configuration
+
+# Required: Your YouTube API key
+api_key = "YOUR_API_KEY_HERE"
+
+# Optional: How often to poll for new messages (milliseconds)
+poll_interval_ms = 3000
+
+# Optional: TTS voice to use (Windows voice name)
+# Common voices: "Microsoft David", "Microsoft Zira", "Microsoft Mark"
+voice_name = "Microsoft David"

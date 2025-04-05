@@ -2,5 +2,45 @@
 name = "youtube-live-tts"
 version = "0.1.0"
 edition = "2021"
+authors = ["typester"]
+description = "A TTS bot for YouTube Live chat"
 
 [dependencies]
+# Core async runtime
+tokio = { version = "1", features = ["full"] }
+
+# HTTP and API client
+reqwest = { version = "0.11", features = ["json"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# TTS for Windows
+windows = { version = "0.48", features = [
+    "Media_SpeechSynthesis", 
+    "Media_Core", 
+    "Storage_Streams", 
+    "Foundation_Collections",
+    "Media_Playback",
+    "Media_Audio"
+] }
+
+# CLI interface
+clap = { version = "4.3", features = ["derive"] }
+
+# Configuration
+toml = "0.7"
+dirs = "5.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
