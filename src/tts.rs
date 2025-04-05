@@ -52,19 +52,18 @@ impl TtsEngine {
             }
         }
 
-        Err(AppError::TTS(format!("Voice '{}' not found", voice_name)).into())
+        Err(AppError::Tts(format!("Voice '{}' not found", voice_name)).into())
     }
 
     pub fn speak(&self, text: &str) -> Result<()> {
-        // Skip if already speaking
         if self.is_speaking.load(Ordering::SeqCst) {
+            tracing::debug!("Already speaking, skipping text: {}", text);
             return Ok(());
         }
 
         self.is_speaking.store(true, Ordering::SeqCst);
         let is_speaking = self.is_speaking.clone();
 
-        // Speak in background thread to not block main thread
         let text_hstring = HSTRING::from(text);
         let synthesizer = self.synthesizer.clone();
 
@@ -73,32 +72,28 @@ impl TtsEngine {
                 .SynthesizeTextToStreamAsync(&text_hstring)
                 .and_then(|async_op| async_op.get())
                 .and_then(|stream| {
-                    // Read audio data from stream
                     DataReader::CreateDataReader(&stream).and_then(|reader| {
-                        // Convert u64 to u32 safely
                         let size = match stream.Size() {
                             Ok(size) => match size.try_into() {
                                 Ok(size_u32) => Ok(size_u32),
                                 Err(_) => Err(windows::core::Error::new(
-                                    windows::core::HRESULT(0x80004005u32 as i32), // E_FAIL
+                                    windows::core::HRESULT(0x80004005u32 as i32),
                                     HSTRING::from("Stream size too large for u32"),
                                 )),
                             },
                             Err(e) => Err(e),
                         }?;
 
-                        reader.LoadAsync(size).and_then(|_| {
-                            // Play audio (Windows handles this automatically)
-                            Ok(())
+                        reader.LoadAsync(size).map(|_| {
+                            tracing::debug!("Audio stream loaded and playing");
                         })
                     })
                 });
 
-            // Release speaking lock
             is_speaking.store(false, Ordering::SeqCst);
 
             if let Err(e) = result {
-                eprintln!("TTS error: {}", e);
+                tracing::error!("TTS error: {}", e);
             }
         });
 

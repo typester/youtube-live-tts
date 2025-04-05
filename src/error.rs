@@ -9,7 +9,7 @@ pub enum AppError {
     YouTube(String),
 
     #[error("TTS engine error: {0}")]
-    TTS(String),
+    Tts(String),
 
     #[error("I/O error: {0}")]
     IO(#[from] std::io::Error),
@@ -22,7 +22,4 @@ pub enum AppError {
 
     #[error("Windows API error: {0}")]
     Windows(String),
-
-    #[error("Unknown error: {0}")]
-    Unknown(String),
 }

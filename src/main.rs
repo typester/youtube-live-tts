@@ -27,7 +27,9 @@ async fn main() -> Result<()> {
     // Initialize logging with INFO level by default
     // Use RUST_LOG env var if set, otherwise default to info for this crate
     tracing_subscriber::fmt()
-        .with_env_filter(std::env::var("RUST_LOG").unwrap_or_else(|_| "youtube_live_tts=info".into()))
+        .with_env_filter(
+            std::env::var("RUST_LOG").unwrap_or_else(|_| "youtube_live_tts=info".into()),
+        )
         .init();
 
     // Parse command line arguments
@@ -57,9 +59,7 @@ async fn main() -> Result<()> {
                 .await?
         }
         _ => {
-            return Err(
-                anyhow::anyhow!("Either --video-id or --channel-id must be provided").into(),
-            );
+            return Err(anyhow::anyhow!("Either --video-id or --channel-id must be provided"));
         }
     };
 

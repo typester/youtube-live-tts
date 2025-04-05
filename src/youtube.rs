@@ -1,7 +1,9 @@
 use crate::error::AppError;
 use anyhow::Result;
+use chrono::DateTime;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::time::{sleep, Duration};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -18,6 +20,21 @@ pub struct ChatMonitor {
     api_key: String,
     next_page_token: Option<String>,
     poll_interval_ms: u64,
+    last_processed_time: u64,
+}
+
+fn parse_youtube_timestamp(timestamp: &str) -> u64 {
+    match DateTime::parse_from_rfc3339(timestamp) {
+        Ok(dt) => dt.timestamp() as u64,
+        Err(e) => {
+            tracing::warn!("Failed to parse timestamp '{}': {}", timestamp, e);
+            // Use current time as fallback
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs()
+        }
+    }
 }
 
 impl ChatMonitor {
@@ -32,6 +49,7 @@ impl ChatMonitor {
             api_key: api_key.to_string(),
             next_page_token: None,
             poll_interval_ms: 3000,
+            last_processed_time: 0,
         })
     }
 
@@ -204,7 +222,6 @@ impl ChatMonitor {
             .json::<serde_json::Value>()
             .await?;
 
-        // Update next page token
         self.next_page_token = response["nextPageToken"].as_str().map(String::from);
 
         let items = match response["items"].as_array() {
@@ -220,6 +237,12 @@ impl ChatMonitor {
                 item["snippet"]["displayMessage"].as_str(),
                 item["snippet"]["publishedAt"].as_str(),
             ) {
+                let ts_value = parse_youtube_timestamp(timestamp);
+                if ts_value <= self.last_processed_time {
+                    tracing::debug!("Skipping old message: {}", id);
+                    continue;
+                }
+
                 messages.push(ChatMessage {
                     id: id.to_string(),
                     author: author.to_string(),
@@ -227,6 +250,12 @@ impl ChatMonitor {
                     timestamp: timestamp.to_string(),
                 });
             }
+        }
+
+        messages.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+
+        if let Some(latest_msg) = messages.first() {
+            self.last_processed_time = parse_youtube_timestamp(&latest_msg.timestamp);
         }
 
         Ok(messages)
