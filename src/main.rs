@@ -5,7 +5,6 @@ mod youtube;
 
 use anyhow::Result;
 use clap::Parser;
-use tracing::info;
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about)]
@@ -30,7 +29,7 @@ async fn main() -> Result<()> {
 
     // Parse command line arguments
     let args = Args::parse();
-    info!("Starting YouTube Live TTS Bot");
+    tracing::info!("Starting YouTube Live TTS Bot");
 
     // Load configuration
     let config = config::load_config(args.config.as_deref())?;
@@ -38,18 +37,18 @@ async fn main() -> Result<()> {
     // Initialize TTS engine
     let mut tts_engine = tts::TtsEngine::new()?;
     if let Err(e) = tts_engine.set_voice(&config.voice_name) {
-        info!("Failed to set voice '{}': {}", config.voice_name, e);
-        info!("Using default voice instead");
+        tracing::info!("Failed to set voice '{}': {}", config.voice_name, e);
+        tracing::info!("Using default voice instead");
     }
 
     // Get video ID either directly or by finding the live stream for a channel
     let video_id = match (args.video_id, args.channel_id) {
         (Some(vid), _) => {
-            info!("Using provided video ID: {}", vid);
+            tracing::info!("Using provided video ID: {}", vid);
             vid
         }
         (_, Some(channel)) => {
-            info!("Searching for live stream for channel: {}", channel);
+            tracing::info!("Searching for live stream for channel: {}", channel);
             let client = reqwest::Client::new();
             youtube::ChatMonitor::find_live_video_id_by_channel(&client, &channel, &config.api_key)
                 .await?
@@ -66,9 +65,9 @@ async fn main() -> Result<()> {
     chat_monitor.set_poll_interval(config.poll_interval_ms);
 
     // Main processing loop
-    info!("Monitoring chat for video ID: {}", video_id);
+    tracing::info!("Monitoring chat for video ID: {}", video_id);
     while let Some(message) = chat_monitor.next_message().await? {
-        info!("New message from {}: {}", message.author, message.text);
+        tracing::info!("New message from {}: {}", message.author, message.text);
         tts_engine.speak(&format!("{}さん: {}", message.author, message.text))?;
     }
 

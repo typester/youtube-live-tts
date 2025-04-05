@@ -21,5 +21,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Minimize comments - add them only for complex or non-obvious code sections
 - Always run `cargo fmt --all` before committing any code
 - Always test cross-compilation with `cargo build --release --target x86_64-pc-windows-gnu` before committing
+- Use fully qualified paths for macros (e.g., `tracing::info!()` instead of `use tracing::info; info!()`)
 - Respond to user prompts in the same language they use (Japanese or English)
 - All generated code and documentation should be in English regardless of prompt language

@@ -3,7 +3,6 @@ use anyhow::Result;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tokio::time::{sleep, Duration};
-use tracing::info;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessage {
@@ -100,7 +99,7 @@ impl ChatMonitor {
         channel_id: &str,
         api_key: &str,
     ) -> Result<String> {
-        info!("Searching for live stream for channel: {}", channel_id);
+        tracing::info!("Searching for live stream for channel: {}", channel_id);
 
         // First, check if the input is a custom channel name (without the UC prefix)
         // If so, we need to get the actual channel ID first
@@ -141,7 +140,7 @@ impl ChatMonitor {
             .ok_or_else(|| AppError::YouTube("Invalid video ID in response".to_string()))?
             .to_string();
 
-        info!("Found live stream with video ID: {}", video_id);
+        tracing::info!("Found live stream with video ID: {}", video_id);
 
         Ok(video_id)
     }
@@ -151,7 +150,7 @@ impl ChatMonitor {
         username: &str,
         api_key: &str,
     ) -> Result<String> {
-        info!("Looking up channel ID for username: {}", username);
+        tracing::info!("Looking up channel ID for username: {}", username);
 
         let url = format!(
             "https://www.googleapis.com/youtube/v3/channels?part=id&forUsername={}&key={}",
@@ -180,7 +179,7 @@ impl ChatMonitor {
             .ok_or_else(|| AppError::YouTube("Invalid channel ID in response".to_string()))?
             .to_string();
 
-        info!("Found channel ID: {}", channel_id);
+        tracing::info!("Found channel ID: {}", channel_id);
 
         Ok(channel_id)
     }
