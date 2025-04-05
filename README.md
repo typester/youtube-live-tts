@@ -53,7 +53,7 @@ cargo build --release
 For Windows cross-compilation:
 
 ```
-cargo build --release --target x86_64-pc-windows-msvc
+cargo build --release --target x86_64-pc-windows-gnu
 ```
 
 ## Getting a YouTube API Key
