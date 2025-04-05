@@ -1,13 +1,9 @@
-mod config;
-mod error;
-mod tts;
-mod youtube;
-
 use anyhow::Result;
 use clap::Parser;
+use youtube_live_tts::{config, youtube};
 
 #[derive(Parser, Debug)]
-#[clap(author, version, about)]
+#[clap(author, version, about = "Simple YouTube chat monitor")]
 struct Args {
     /// YouTube Live video ID
     #[clap(short, long, group = "target")]
@@ -24,27 +20,19 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Initialize logging with INFO level by default
-    // Use RUST_LOG env var if set, otherwise default to info for this crate
+    // Initialize logging
     tracing_subscriber::fmt()
         .with_env_filter(
-            std::env::var("RUST_LOG").unwrap_or_else(|_| "youtube_live_tts=info".into()),
+            std::env::var("RUST_LOG").unwrap_or_else(|_| "youtube_live_tts=debug".into()),
         )
         .init();
 
     // Parse command line arguments
     let args = Args::parse();
-    tracing::info!("Starting YouTube Live TTS Bot");
+    tracing::info!("Starting YouTube Live Chat Monitor");
 
     // Load configuration
     let config = config::load_config(args.config.as_deref())?;
-
-    // Initialize TTS engine
-    let mut tts_engine = tts::TtsEngine::new()?;
-    if let Err(e) = tts_engine.set_voice(&config.voice_name) {
-        tracing::info!("Failed to set voice '{}': {}", config.voice_name, e);
-        tracing::info!("Using default voice instead");
-    }
 
     // Get video ID either directly or by finding the live stream for a channel
     let video_id = match (args.video_id, args.channel_id) {
@@ -71,9 +59,13 @@ async fn main() -> Result<()> {
 
     // Main processing loop
     tracing::info!("Monitoring chat for video ID: {}", video_id);
+    tracing::info!("Press Ctrl+C to exit");
+
     while let Some(message) = chat_monitor.next_message().await? {
-        tracing::info!("New message from {}: {}", message.author, message.text);
-        tts_engine.speak(&format!("{}さん: {}", message.author, message.text))?;
+        println!(
+            "[{}] {}: {}",
+            message.timestamp, message.author, message.text
+        );
     }
 
     Ok(())

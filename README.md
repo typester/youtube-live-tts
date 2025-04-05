@@ -26,6 +26,37 @@ Where:
 - `CHANNEL_ID_OR_USERNAME` is either a channel ID (starting with "UC") or a username
 - `config.toml` is an optional path to your configuration file
 
+### Debug Utilities
+
+The package includes two utility programs for testing and debugging:
+
+#### Chat Monitor
+
+Monitors YouTube Live chat without TTS:
+
+```
+# By video ID
+chat_monitor.exe --video-id YOUR_VIDEO_ID
+
+# By channel ID or username
+chat_monitor.exe --channel-id CHANNEL_ID_OR_USERNAME
+```
+
+#### Text Speaker
+
+Test the TTS engine directly:
+
+```
+# Speak text from command line
+speak_text.exe --text "Hello, world!"
+
+# Specify a voice
+speak_text.exe --voice "Microsoft Zira"
+
+# Interactive mode (reads from stdin)
+speak_text.exe
+```
+
 ## Configuration
 
 Create a `config.toml` file with the following options:
