@@ -1,8 +1,9 @@
+use crate::error::AppError;
+use anyhow::Result;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use anyhow::Result;
 use tokio::time::{sleep, Duration};
-use crate::error::AppError;
+use tracing::info;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessage {
@@ -64,18 +65,27 @@ impl ChatMonitor {
             self.video_id, self.api_key
         );
 
-        let response = self.client.get(&url).send().await?
-            .json::<serde_json::Value>().await?;
+        let response = self
+            .client
+            .get(&url)
+            .send()
+            .await?
+            .json::<serde_json::Value>()
+            .await?;
 
-        let items = response["items"].as_array()
+        let items = response["items"]
+            .as_array()
             .ok_or_else(|| AppError::YouTube("Invalid API response".to_string()))?;
 
         if items.is_empty() {
-            return Err(AppError::YouTube("Video not found or not a live stream".to_string()).into());
+            return Err(
+                AppError::YouTube("Video not found or not a live stream".to_string()).into(),
+            );
         }
 
         // Store the live chat ID
-        let chat_id = items[0]["liveStreamingDetails"]["activeLiveChatId"].as_str()
+        let chat_id = items[0]["liveStreamingDetails"]["activeLiveChatId"]
+            .as_str()
             .ok_or_else(|| AppError::YouTube("Live chat not available".to_string()))?
             .to_string();
 
@@ -83,6 +93,96 @@ impl ChatMonitor {
         self.video_id = chat_id;
         self.next_page_token = Some(String::new());
         Ok(())
+    }
+
+    pub async fn find_live_video_id_by_channel(
+        client: &Client,
+        channel_id: &str,
+        api_key: &str,
+    ) -> Result<String> {
+        info!("Searching for live stream for channel: {}", channel_id);
+
+        // First, check if the input is a custom channel name (without the UC prefix)
+        // If so, we need to get the actual channel ID first
+        let actual_channel_id = if !channel_id.starts_with("UC") {
+            Self::get_channel_id_by_username(client, channel_id, api_key).await?
+        } else {
+            channel_id.to_string()
+        };
+
+        // Now search for live broadcasts on this channel
+        let url = format!(
+            "https://www.googleapis.com/youtube/v3/search?part=snippet&channelId={}&eventType=live&type=video&key={}",
+            actual_channel_id, api_key
+        );
+
+        let response = client
+            .get(&url)
+            .send()
+            .await?
+            .json::<serde_json::Value>()
+            .await?;
+
+        let items = response["items"]
+            .as_array()
+            .ok_or_else(|| AppError::YouTube("Invalid API response".to_string()))?;
+
+        if items.is_empty() {
+            return Err(AppError::YouTube(format!(
+                "No live streams found for channel {}",
+                channel_id
+            ))
+            .into());
+        }
+
+        // Get the video ID from the first live stream
+        let video_id = items[0]["id"]["videoId"]
+            .as_str()
+            .ok_or_else(|| AppError::YouTube("Invalid video ID in response".to_string()))?
+            .to_string();
+
+        info!("Found live stream with video ID: {}", video_id);
+
+        Ok(video_id)
+    }
+
+    async fn get_channel_id_by_username(
+        client: &Client,
+        username: &str,
+        api_key: &str,
+    ) -> Result<String> {
+        info!("Looking up channel ID for username: {}", username);
+
+        let url = format!(
+            "https://www.googleapis.com/youtube/v3/channels?part=id&forUsername={}&key={}",
+            username, api_key
+        );
+
+        let response = client
+            .get(&url)
+            .send()
+            .await?
+            .json::<serde_json::Value>()
+            .await?;
+
+        let items = response["items"]
+            .as_array()
+            .ok_or_else(|| AppError::YouTube("Invalid API response".to_string()))?;
+
+        if items.is_empty() {
+            return Err(
+                AppError::YouTube(format!("Channel not found for username {}", username)).into(),
+            );
+        }
+
+        let channel_id = items[0]["id"]
+            .as_str()
+            .ok_or_else(|| AppError::YouTube("Invalid channel ID in response".to_string()))?
+            .to_string();
+
+        info!("Found channel ID: {}", channel_id);
+
+        Ok(channel_id)
     }
 
     async fn fetch_messages(&mut self) -> Result<Vec<ChatMessage>> {
@@ -97,8 +197,13 @@ impl ChatMonitor {
             }
         }
 
-        let response = self.client.get(&url).send().await?
-            .json::<serde_json::Value>().await?;
+        let response = self
+            .client
+            .get(&url)
+            .send()
+            .await?
+            .json::<serde_json::Value>()
+            .await?;
 
         // Update next page token
         self.next_page_token = response["nextPageToken"].as_str().map(String::from);

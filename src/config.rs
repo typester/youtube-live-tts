@@ -1,8 +1,8 @@
+use crate::error::AppError;
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
-use anyhow::Result;
-use crate::error::AppError;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Config {
@@ -36,7 +36,7 @@ pub fn load_config(config_path: Option<&str>) -> Result<Config> {
     if let Some(path) = config_path {
         return parse_config_file(path);
     }
-    
+
     // Otherwise check default locations
     if let Some(config_dir) = dirs::config_dir() {
         let default_path = config_dir.join("youtube-live-tts/config.toml");
@@ -44,21 +44,20 @@ pub fn load_config(config_path: Option<&str>) -> Result<Config> {
             return parse_config_file(default_path);
         }
     }
-    
+
     // Fallback to current directory
     let local_config = Path::new("config.toml");
     if local_config.exists() {
         return parse_config_file(local_config);
     }
-    
+
     // If no config found, return error
     Err(AppError::Config("No configuration file found. Please provide API key".to_string()).into())
 }
 
 fn parse_config_file<P: AsRef<Path>>(path: P) -> Result<Config> {
-    let content = fs::read_to_string(path)?
-        .parse::<toml::Table>()?;
-    
+    let content = fs::read_to_string(path)?.parse::<toml::Table>()?;
+
     let config = toml::from_str(&content.to_string())?;
     Ok(config)
 }

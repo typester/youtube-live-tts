@@ -11,12 +11,19 @@ A command-line tool for reading YouTube Live chat messages with Text-to-Speech.
 
 ## Usage
 
+You can start the bot using either a video ID or a channel ID:
+
 ```
+# Using video ID directly
 youtube-live-tts.exe --video-id YOUR_VIDEO_ID [--config path/to/config.toml]
+
+# Using channel ID or username (auto-detects active live stream)
+youtube-live-tts.exe --channel-id CHANNEL_ID_OR_USERNAME [--config path/to/config.toml]
 ```
 
 Where:
 - `YOUR_VIDEO_ID` is the ID of the YouTube Live stream (the part after `v=` in the URL)
+- `CHANNEL_ID_OR_USERNAME` is either a channel ID (starting with "UC") or a username
 - `config.toml` is an optional path to your configuration file
 
 ## Configuration
