@@ -24,8 +24,11 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Initialize logging
-    tracing_subscriber::fmt::init();
+    // Initialize logging with INFO level by default
+    // Use RUST_LOG env var if set, otherwise default to info for this crate
+    tracing_subscriber::fmt()
+        .with_env_filter(std::env::var("RUST_LOG").unwrap_or_else(|_| "youtube_live_tts=info".into()))
+        .init();
 
     // Parse command line arguments
     let args = Args::parse();
