@@ -75,7 +75,10 @@ async fn main() -> Result<()> {
             tts_engine.speak(line)?;
 
             // Wait for speaking to complete
-            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+            // Give more time for the speech to complete based on text length
+            let wait_time = (line.len() as u64 * 100).max(2000);
+            tracing::debug!("Waiting for {}ms for speech to complete", wait_time);
+            tokio::time::sleep(tokio::time::Duration::from_millis(wait_time)).await;
         }
         buffer
     };
@@ -85,8 +88,10 @@ async fn main() -> Result<()> {
         tracing::info!("Speaking: {}", text);
         tts_engine.speak(&text)?;
 
-        // Give time for speech to complete
-        tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+        // Give time for speech to complete based on text length
+        let wait_time = (text.len() as u64 * 100).max(5000);
+        tracing::info!("Waiting for {}ms for speech to complete", wait_time);
+        tokio::time::sleep(tokio::time::Duration::from_millis(wait_time)).await;
     }
 
     Ok(())

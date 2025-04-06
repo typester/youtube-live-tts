@@ -1,11 +1,9 @@
 use crate::error::AppError;
 use anyhow::Result;
-use std::convert::TryInto;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use windows::core::HSTRING;
 use windows::Media::SpeechSynthesis::SpeechSynthesizer;
-use windows::Storage::Streams::DataReader;
 
 pub struct TtsEngine {
     synthesizer: SpeechSynthesizer,
@@ -72,22 +70,64 @@ impl TtsEngine {
                 .SynthesizeTextToStreamAsync(&text_hstring)
                 .and_then(|async_op| async_op.get())
                 .and_then(|stream| {
-                    DataReader::CreateDataReader(&stream).and_then(|reader| {
-                        let size = match stream.Size() {
-                            Ok(size) => match size.try_into() {
-                                Ok(size_u32) => Ok(size_u32),
-                                Err(_) => Err(windows::core::Error::new(
-                                    windows::core::HRESULT(0x80004005u32 as i32),
-                                    HSTRING::from("Stream size too large for u32"),
-                                )),
-                            },
-                            Err(e) => Err(e),
-                        }?;
+                    use std::thread;
+                    use std::time::Duration;
+                    use windows::Media::Core::MediaSource;
+                    use windows::Media::Playback::{MediaPlaybackItem, MediaPlayer};
 
-                        reader.LoadAsync(size).map(|_| {
-                            tracing::debug!("Audio stream loaded and playing");
-                        })
-                    })
+                    // Create a MediaPlayer and play the stream
+                    let player = MediaPlayer::new().map_err(|e| {
+                        windows::core::Error::new(
+                            windows::core::HRESULT(0x80004005u32 as i32),
+                            HSTRING::from(format!("Failed to create MediaPlayer: {}", e)),
+                        )
+                    })?;
+
+                    // Create a MediaSource from the stream
+                    let content_type = HSTRING::from("");
+                    let media_source = MediaSource::CreateFromStream(&stream, &content_type)
+                        .map_err(|e| {
+                            windows::core::Error::new(
+                                windows::core::HRESULT(0x80004005u32 as i32),
+                                HSTRING::from(format!("Failed to create MediaSource: {}", e)),
+                            )
+                        })?;
+
+                    // Create a MediaPlaybackItem from the source
+                    let playback_item = MediaPlaybackItem::Create(&media_source).map_err(|e| {
+                        windows::core::Error::new(
+                            windows::core::HRESULT(0x80004005u32 as i32),
+                            HSTRING::from(format!("Failed to create MediaPlaybackItem: {}", e)),
+                        )
+                    })?;
+
+                    // Set the source and play
+                    player.SetSource(&playback_item).map_err(|e| {
+                        windows::core::Error::new(
+                            windows::core::HRESULT(0x80004005u32 as i32),
+                            HSTRING::from(format!("Failed to set source: {}", e)),
+                        )
+                    })?;
+
+                    player.Play().map_err(|e| {
+                        windows::core::Error::new(
+                            windows::core::HRESULT(0x80004005u32 as i32),
+                            HSTRING::from(format!("Failed to play audio: {}", e)),
+                        )
+                    })?;
+
+                    // Estimate duration based on text length (rough approximation) with a minimum
+                    let estimated_duration_ms = (text_hstring.len() as u64 * 100).max(2000); // ~100ms per character with 2sec minimum
+                    tracing::debug!(
+                        "Playing audio, estimated duration: {}ms",
+                        estimated_duration_ms
+                    );
+
+                    // Sleep to allow playback to complete
+                    thread::sleep(Duration::from_millis(estimated_duration_ms));
+
+                    tracing::debug!("Audio playback completed");
+                    Ok(())
                 });
 
             is_speaking.store(false, Ordering::SeqCst);
