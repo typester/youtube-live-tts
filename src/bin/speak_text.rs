@@ -48,8 +48,8 @@ async fn main() -> Result<()> {
     }
 
     // Get text to speak
-    let text = if let Some(text) = args.text {
-        text
+    let text = if let Some(ref text) = args.text {
+        text.clone()
     } else {
         // Read from stdin if no text provided
         tracing::info!("Enter text to speak (Ctrl+D to exit):");
