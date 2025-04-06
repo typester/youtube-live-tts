@@ -2,12 +2,14 @@
 
 A command-line tool for reading YouTube Live chat messages with Text-to-Speech.
 
+> **Important Note:** This application requires Windows to run. It was designed primarily for Windows systems and uses Windows-specific APIs for the default TTS engine.
+
 ## Features
 
 - Simple, portable Windows executable
 - Monitors YouTube Live chat in real-time
-- Reads new messages aloud using Windows TTS voices
-- Configurable voice and polling settings
+- Reads new messages aloud using Windows TTS or OpenAI TTS
+- Configurable voices, engines, and polling settings
 
 ## Usage
 
@@ -19,12 +21,20 @@ youtube-live-tts.exe --video-id YOUR_VIDEO_ID [--config path/to/config.toml]
 
 # Using channel ID or username (auto-detects active live stream)
 youtube-live-tts.exe --channel-id CHANNEL_ID_OR_USERNAME [--config path/to/config.toml]
+
+# Specify TTS engine (windows or openai)
+youtube-live-tts.exe --video-id YOUR_VIDEO_ID --tts-engine openai
+
+# Using OpenAI TTS with specific voice
+youtube-live-tts.exe --video-id YOUR_VIDEO_ID --tts-engine openai --openai-voice nova
 ```
 
 Where:
 - `YOUR_VIDEO_ID` is the ID of the YouTube Live stream (the part after `v=` in the URL)
 - `CHANNEL_ID_OR_USERNAME` is either a channel ID (starting with "UC") or a username
 - `config.toml` is an optional path to your configuration file
+- `--tts-engine` can be either `windows` (default) or `openai`
+- `--openai-voice` selects an OpenAI voice (when using OpenAI TTS)
 
 ### Debug Utilities
 
@@ -50,8 +60,14 @@ Test the TTS engine directly:
 # Speak text from command line
 speak_text.exe --text "Hello, world!"
 
-# Specify a voice
+# Specify a Windows voice
 speak_text.exe --voice "Microsoft Zira"
+
+# Use OpenAI TTS
+speak_text.exe --tts-engine openai --text "Hello, world!"
+
+# Use OpenAI TTS with specific voice and model
+speak_text.exe --tts-engine openai --openai-voice nova --openai-model tts-1-hd --text "Hello, world!"
 
 # Interactive mode (reads from stdin)
 speak_text.exe
@@ -68,8 +84,20 @@ api_key = "YOUR_API_KEY_HERE"
 # Optional: How often to poll for new messages (milliseconds)
 poll_interval_ms = 3000
 
-# Optional: TTS voice to use (Windows voice name)
-voice_name = "Microsoft David"
+# TTS Configuration
+# TTS engine to use: "windows" or "openai"
+tts_engine = "windows"
+
+# Windows TTS configuration (when tts_engine = "windows")
+# Common voices: "Microsoft David", "Microsoft Zira", "Microsoft Mark", etc.
+windows_voice = "Microsoft David"
+
+# OpenAI TTS configuration (when tts_engine = "openai")
+openai_api_key = "YOUR_OPENAI_API_KEY_HERE"
+# Available models: tts-1, tts-1-hd
+openai_model = "tts-1"
+# Available voices: alloy, echo, fable, onyx, nova, shimmer
+openai_voice = "alloy"
 ```
 
 The configuration file can be placed in one of these locations:
@@ -81,18 +109,19 @@ The configuration file can be placed in one of these locations:
 
 Requirements:
 - Rust toolchain (https://rustup.rs/)
+- Windows target support (`rustup target add x86_64-pc-windows-gnu`)
 
 Build commands:
 
 ```
+# For local Windows build
 cargo build --release
-```
 
-For Windows cross-compilation:
-
-```
+# For cross-compilation from Linux/Mac to Windows
 cargo build --release --target x86_64-pc-windows-gnu
 ```
+
+> **Note:** This application must run on Windows, even when using OpenAI TTS, due to dependencies on Windows-specific APIs. When using OpenAI TTS, the application requires an internet connection to access the OpenAI API.
 
 ## Getting a YouTube API Key
 
