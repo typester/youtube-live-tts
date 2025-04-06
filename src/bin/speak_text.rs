@@ -1,5 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
+use config::TtsEngine;
 use std::io::Write;
 use youtube_live_tts::{config, tts};
 
@@ -10,9 +11,21 @@ struct Args {
     #[clap(short, long)]
     text: Option<String>,
 
-    /// Voice name to use
+    /// Windows voice name to use (when using Windows TTS)
     #[clap(short, long)]
     voice: Option<String>,
+
+    /// TTS engine to use (windows or openai)
+    #[clap(long)]
+    tts_engine: Option<String>,
+
+    /// OpenAI voice to use (when using OpenAI TTS)
+    #[clap(long)]
+    openai_voice: Option<String>,
+
+    /// OpenAI model to use (when using OpenAI TTS)
+    #[clap(long)]
+    openai_model: Option<String>,
 
     /// Path to config file (optional)
     #[clap(short, long)]
@@ -33,19 +46,37 @@ async fn main() -> Result<()> {
     tracing::info!("Starting Text-to-Speech Test Tool");
 
     // Try to load configuration for default voice
-    let config = config::load_config(args.config.as_deref()).unwrap_or_default();
+    let mut config = config::load_config(args.config.as_deref()).unwrap_or_default();
+
+    // Override config with command line arguments if provided
+    if let Some(engine) = &args.tts_engine {
+        match engine.to_lowercase().as_str() {
+            "windows" => config.tts_engine = TtsEngine::Windows,
+            "openai" => config.tts_engine = TtsEngine::OpenAI,
+            _ => {
+                return Err(anyhow::anyhow!(
+                    "Invalid TTS engine: {}. Supported engines: windows, openai",
+                    engine
+                ));
+            }
+        }
+    }
+
+    if let Some(voice) = &args.voice {
+        config.windows_voice = voice.clone();
+    }
+
+    if let Some(voice) = &args.openai_voice {
+        config.openai_voice = voice.clone();
+    }
+
+    if let Some(model) = &args.openai_model {
+        config.openai_model = model.clone();
+    }
 
     // Initialize TTS engine
-    let mut tts_engine = tts::TtsEngine::new()?;
-
-    // Set voice (command line takes precedence over config)
-    let voice_name = args.voice.as_deref().unwrap_or(&config.voice_name);
-    if let Err(e) = tts_engine.set_voice(voice_name) {
-        tracing::warn!("Failed to set voice '{}': {}", voice_name, e);
-        tracing::info!("Using default voice instead");
-    } else {
-        tracing::info!("Using voice: {}", voice_name);
-    }
+    tracing::info!("Initializing TTS engine: {:?}", config.tts_engine);
+    let tts_engine = tts::create_tts_engine(&config)?;
 
     // Get text to speak
     let text = if let Some(ref text) = args.text {

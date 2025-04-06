@@ -1,17 +1,62 @@
+use crate::config::TtsEngine as TtsEngineType;
 use crate::error::AppError;
 use anyhow::Result;
+use std::io::Cursor;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use windows::core::HSTRING;
-use windows::Media::SpeechSynthesis::SpeechSynthesizer;
+use std::time::Duration;
+use tokio::fs::File;
+use tokio::io::AsyncWriteExt;
 
-pub struct TtsEngine {
-    synthesizer: SpeechSynthesizer,
+pub trait TextToSpeech: Send + Sync {
+    fn speak(&self, text: &str) -> Result<()>;
+}
+
+// Factory function to create the appropriate TTS engine
+pub fn create_tts_engine(config: &crate::config::Config) -> Result<Box<dyn TextToSpeech>> {
+    match config.tts_engine {
+        TtsEngineType::Windows => {
+            let mut engine = WindowsTtsEngine::new()?;
+            let voice_name = if !config.windows_voice.is_empty() {
+                &config.windows_voice
+            } else {
+                &config.voice_name // For backward compatibility
+            };
+
+            if let Err(e) = engine.set_voice(voice_name) {
+                tracing::warn!("Failed to set Windows voice '{}': {}", voice_name, e);
+                tracing::info!("Using default Windows voice instead");
+            }
+            Ok(Box::new(engine))
+        }
+        TtsEngineType::OpenAI => {
+            if let Some(api_key) = &config.openai_api_key {
+                Ok(Box::new(OpenAITtsEngine::new(
+                    api_key.clone(),
+                    config.openai_model.clone(),
+                    config.openai_voice.clone(),
+                )?))
+            } else {
+                Err(AppError::Config(
+                    "OpenAI API key is required for OpenAI TTS engine".to_string(),
+                )
+                .into())
+            }
+        }
+    }
+}
+
+// Windows TTS implementation
+pub struct WindowsTtsEngine {
+    synthesizer: windows::Media::SpeechSynthesis::SpeechSynthesizer,
     is_speaking: Arc<AtomicBool>,
 }
 
-impl TtsEngine {
+impl WindowsTtsEngine {
     pub fn new() -> Result<Self> {
+        use windows::Media::SpeechSynthesis::SpeechSynthesizer;
+
         let synthesizer = SpeechSynthesizer::new()
             .map_err(|e| AppError::Windows(format!("Failed to create TTS engine: {}", e)))?;
 
@@ -22,6 +67,8 @@ impl TtsEngine {
     }
 
     pub fn set_voice(&mut self, voice_name: &str) -> Result<()> {
+        use windows::Media::SpeechSynthesis::SpeechSynthesizer;
+
         // Get all available voices using the static method
         let voices = SpeechSynthesizer::AllVoices()
             .map_err(|e| AppError::Windows(format!("Failed to get voices: {}", e)))?;
@@ -52,8 +99,12 @@ impl TtsEngine {
 
         Err(AppError::Tts(format!("Voice '{}' not found", voice_name)).into())
     }
+}
 
-    pub fn speak(&self, text: &str) -> Result<()> {
+impl TextToSpeech for WindowsTtsEngine {
+    fn speak(&self, text: &str) -> Result<()> {
+        use windows::core::HSTRING;
+
         if self.is_speaking.load(Ordering::SeqCst) {
             tracing::debug!("Already speaking, skipping text: {}", text);
             return Ok(());
@@ -71,7 +122,6 @@ impl TtsEngine {
                 .and_then(|async_op| async_op.get())
                 .and_then(|stream| {
                     use std::thread;
-                    use std::time::Duration;
                     use windows::Media::Core::MediaSource;
                     use windows::Media::Playback::{MediaPlaybackItem, MediaPlayer};
 
@@ -134,6 +184,137 @@ impl TtsEngine {
 
             if let Err(e) = result {
                 tracing::error!("TTS error: {}", e);
+            }
+        });
+
+        Ok(())
+    }
+}
+
+// OpenAI TTS implementation
+pub struct OpenAITtsEngine {
+    api_key: String,
+    model: String,
+    voice: String,
+    is_speaking: Arc<AtomicBool>,
+    client: reqwest::Client,
+    temp_dir: PathBuf,
+}
+
+impl OpenAITtsEngine {
+    pub fn new(api_key: String, model: String, voice: String) -> Result<Self> {
+        let temp_dir = tempfile::Builder::new()
+            .prefix("youtube-live-tts")
+            .tempdir()?
+            .into_path();
+
+        Ok(Self {
+            api_key,
+            model,
+            voice,
+            is_speaking: Arc::new(AtomicBool::new(false)),
+            client: reqwest::Client::new(),
+            temp_dir,
+        })
+    }
+}
+
+impl TextToSpeech for OpenAITtsEngine {
+    fn speak(&self, text: &str) -> Result<()> {
+        if self.is_speaking.load(Ordering::SeqCst) {
+            tracing::debug!("Already speaking with OpenAI TTS, skipping text: {}", text);
+            return Ok(());
+        }
+
+        // Mark as speaking
+        self.is_speaking.store(true, Ordering::SeqCst);
+        let is_speaking = self.is_speaking.clone();
+
+        // Clone required values for async task
+        let api_key = self.api_key.clone();
+        let model = self.model.clone();
+        let voice = self.voice.clone();
+        let client = self.client.clone();
+        let text = text.to_string();
+        let temp_dir = self.temp_dir.clone();
+
+        // Spawn async task for TTS
+        tokio::spawn(async move {
+            let result = async {
+                // Create request JSON
+                let json = serde_json::json!({
+                    "model": model,
+                    "input": text,
+                    "voice": voice,
+                    "response_format": "mp3"
+                });
+
+                tracing::debug!("Sending TTS request to OpenAI API for text: {}", text);
+
+                // Send request to OpenAI API
+                let response = client
+                    .post("https://api.openai.com/v1/audio/speech")
+                    .header("Content-Type", "application/json")
+                    .header("Authorization", format!("Bearer {}", api_key))
+                    .json(&json)
+                    .send()
+                    .await?;
+
+                // Check for error
+                if !response.status().is_success() {
+                    let error_text = response.text().await?;
+                    return Err(anyhow::anyhow!("OpenAI API error: {}", error_text));
+                }
+
+                // Get the audio bytes
+                let bytes = response.bytes().await?;
+                tracing::debug!("Received {} bytes of audio from OpenAI", bytes.len());
+
+                // Save to temporary file
+                let temp_file_path =
+                    temp_dir.join(format!("tts_{}.mp3", chrono::Utc::now().timestamp_millis()));
+                let mut file = File::create(&temp_file_path).await?;
+                file.write_all(&bytes).await?;
+                file.flush().await?;
+                drop(file);
+
+                tracing::debug!("Saved audio to temporary file: {:?}", temp_file_path);
+
+                // Play the audio using rodio
+                let audio_bytes = bytes.to_vec();
+                tokio::task::spawn_blocking(move || -> Result<()> {
+                    let cursor = Cursor::new(audio_bytes);
+
+                    // Initialize audio output
+                    let (_stream, stream_handle) = rodio::OutputStream::try_default()?;
+                    let sink = rodio::Sink::try_new(&stream_handle)?;
+
+                    // Load and play the audio
+                    sink.append(rodio::Decoder::new(cursor)?);
+
+                    // Wait for playback to complete
+                    sink.sleep_until_end();
+
+                    tracing::debug!("OpenAI TTS audio playback completed");
+                    Ok(())
+                })
+                .await??;
+
+                // Try to clean up temp file
+                if let Err(e) = tokio::fs::remove_file(&temp_file_path).await {
+                    tracing::warn!("Failed to clean up temp file: {}", e);
+                }
+
+                Ok(())
+            }
+            .await;
+
+            // Reset speaking flag regardless of result
+            is_speaking.store(false, Ordering::SeqCst);
+
+            // Log any errors
+            if let Err(e) = result {
+                tracing::error!("OpenAI TTS error: {}", e);
             }
         });
 

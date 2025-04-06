@@ -6,6 +6,18 @@ api_key = "YOUR_API_KEY_HERE"
 # Optional: How often to poll for new messages (milliseconds)
 poll_interval_ms = 3000
 
-# Optional: TTS voice to use (Windows voice name)
+# TTS Configuration
+
+# TTS engine to use: "windows" or "openai"
+tts_engine = "windows"
+
+# Windows TTS configuration (when tts_engine = "windows")
 # Common voices: "Microsoft David", "Microsoft Zira", "Microsoft Mark"
-voice_name = "Microsoft David"
+windows_voice = "Microsoft David"
+
+# OpenAI TTS configuration (when tts_engine = "openai")
+openai_api_key = "YOUR_OPENAI_API_KEY_HERE"
+# Available models: tts-1, tts-1-hd
+openai_model = "tts-1"
+# Available voices: alloy, echo, fable, onyx, nova, shimmer
+openai_voice = "alloy"

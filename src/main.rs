@@ -5,6 +5,7 @@ mod youtube;
 
 use anyhow::Result;
 use clap::Parser;
+use config::TtsEngine;
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about)]
@@ -20,6 +21,14 @@ struct Args {
     /// Path to config file (optional)
     #[clap(short, long)]
     config: Option<String>,
+
+    /// TTS engine to use (windows or openai)
+    #[clap(long)]
+    tts_engine: Option<String>,
+
+    /// OpenAI voice to use (if tts-engine is openai)
+    #[clap(long)]
+    openai_voice: Option<String>,
 }
 
 #[tokio::main]
@@ -37,14 +46,29 @@ async fn main() -> Result<()> {
     tracing::info!("Starting YouTube Live TTS Bot");
 
     // Load configuration
-    let config = config::load_config(args.config.as_deref())?;
+    let mut config = config::load_config(args.config.as_deref())?;
 
-    // Initialize TTS engine
-    let mut tts_engine = tts::TtsEngine::new()?;
-    if let Err(e) = tts_engine.set_voice(&config.voice_name) {
-        tracing::info!("Failed to set voice '{}': {}", config.voice_name, e);
-        tracing::info!("Using default voice instead");
+    // Override config with command line arguments if provided
+    if let Some(engine) = args.tts_engine {
+        match engine.to_lowercase().as_str() {
+            "windows" => config.tts_engine = TtsEngine::Windows,
+            "openai" => config.tts_engine = TtsEngine::OpenAI,
+            _ => {
+                return Err(anyhow::anyhow!(
+                    "Invalid TTS engine: {}. Supported engines: windows, openai",
+                    engine
+                ));
+            }
+        }
     }
+
+    if let Some(voice) = args.openai_voice {
+        config.openai_voice = voice;
+    }
+
+    // Initialize appropriate TTS engine
+    tracing::info!("Initializing TTS engine: {:?}", config.tts_engine);
+    let tts_engine = tts::create_tts_engine(&config)?;
 
     // Get video ID either directly or by finding the live stream for a channel
     let video_id = match (args.video_id, args.channel_id) {
