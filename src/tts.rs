@@ -1,13 +1,22 @@
+use std::{
+    io::Cursor,
+    path::PathBuf,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
+
+use anyhow::Result;
+use reqwest;
+use rodio;
+use serde_json;
+use tempfile;
+use tokio::{fs::File, io::AsyncWriteExt};
+
 use crate::config::TtsEngine as TtsEngineType;
 use crate::error::AppError;
-use anyhow::Result;
-use std::io::Cursor;
-use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
-use std::time::Duration;
-use tokio::fs::File;
-use tokio::io::AsyncWriteExt;
 
 pub trait TextToSpeech: Send + Sync {
     fn speak(&self, text: &str) -> Result<()>;

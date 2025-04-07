@@ -1,10 +1,12 @@
-use crate::error::AppError;
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use anyhow::Result;
 use chrono::DateTime;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::time::{sleep, Duration};
+
+use crate::error::AppError;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessage {
@@ -59,7 +61,6 @@ impl ChatMonitor {
 
     pub async fn next_message(&mut self) -> Result<Option<ChatMessage>> {
         if self.next_page_token.is_none() {
-            // Initial fetch to get live chat ID
             self.initialize_chat().await?
         }
 
@@ -67,11 +68,9 @@ impl ChatMonitor {
             let messages = self.fetch_messages().await?;
 
             if !messages.is_empty() {
-                // Return first message and keep the rest for the next call
                 return Ok(Some(messages[0].clone()));
             }
 
-            // Wait before polling again
             sleep(Duration::from_millis(self.poll_interval_ms)).await;
         }
     }
@@ -239,7 +238,6 @@ impl ChatMonitor {
             ) {
                 let ts_value = parse_youtube_timestamp(timestamp);
                 if ts_value <= self.last_processed_time {
-                    tracing::debug!("Skipping old message: {}", id);
                     continue;
                 }
 

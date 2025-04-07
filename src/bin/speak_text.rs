@@ -1,7 +1,9 @@
+use std::io::Write;
+
 use anyhow::Result;
 use clap::Parser;
+
 use config::TtsEngine;
-use std::io::Write;
 use youtube_live_tts::{config, tts};
 
 #[derive(Parser, Debug)]
@@ -82,7 +84,6 @@ async fn main() -> Result<()> {
     let text = if let Some(ref text) = args.text {
         text.clone()
     } else {
-        // Read from stdin if no text provided
         tracing::info!("Enter text to speak (Ctrl+D to exit):");
         let mut buffer = String::new();
         loop {
@@ -91,7 +92,7 @@ async fn main() -> Result<()> {
 
             let mut line = String::new();
             if std::io::stdin().read_line(&mut line)? == 0 {
-                break; // EOF
+                break;
             }
 
             let line = line.trim();
@@ -105,8 +106,6 @@ async fn main() -> Result<()> {
             tracing::info!("Speaking: {}", line);
             tts_engine.speak(line)?;
 
-            // Wait for speaking to complete
-            // Give more time for the speech to complete based on text length
             let wait_time = (line.len() as u64 * 100).max(2000);
             tracing::debug!("Waiting for {}ms for speech to complete", wait_time);
             tokio::time::sleep(tokio::time::Duration::from_millis(wait_time)).await;

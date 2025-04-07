@@ -1,8 +1,9 @@
-use crate::error::AppError;
+use std::{fs, path::Path};
+
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::fs;
-use std::path::Path;
+
+use crate::error::AppError;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
